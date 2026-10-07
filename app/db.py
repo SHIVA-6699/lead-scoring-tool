@@ -29,6 +29,7 @@ def init_db() -> None:
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute(SCHEMA)  # the db file can be deleted between requests, so make sure the table exists every time
     try:
         yield conn
         conn.commit()
