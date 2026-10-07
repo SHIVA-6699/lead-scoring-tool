@@ -1,30 +1,45 @@
-const DEMO_DOMAINS = [
-  "stripe.com",
-  "notion.so",
-  "figma.com",
-  "linear.app",
-  "airtable.com",
-  "vercel.com",
-];
+const DEMO_DOMAINS = ["stripe.com", "notion.so", "figma.com", "linear.app", "airtable.com", "vercel.com"];
 
-const BUCKET_STYLES = {
-  hot: "bg-red-100 text-red-700",
-  warm: "bg-amber-100 text-amber-700",
-  cold: "bg-slate-100 text-slate-600",
-};
+const SIGNAL_LABELS = [
+  ["has_careers_page", "Hiring (careers page)"],
+  ["has_pricing_page", "Has a pricing page"],
+  ["contact_email", "Contact email found"],
+  ["has_linkedin", "LinkedIn company page"],
+  ["has_blog", "Publishes a blog"],
+  ["uses_https", "Uses HTTPS"],
+  ["mobile_friendly", "Mobile friendly"],
+];
 
 const domainsInput = document.getElementById("domains");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const demoBtn = document.getElementById("demoBtn");
+const exportBtn = document.getElementById("exportBtn");
 const statusEl = document.getElementById("status");
-const resultsBody = document.getElementById("results");
+const signalsSection = document.getElementById("signals");
+const ledgerSection = document.getElementById("ledger");
+const ledgerCountLabel = document.getElementById("ledgerCountLabel");
+const sortSelect = document.getElementById("sortSelect");
 const emptyState = document.getElementById("emptyState");
+const toastEl = document.getElementById("toast");
+
+let leads = [];
+let activeBucket = "all";
+let toastTimer = null;
 
 demoBtn.addEventListener("click", () => {
   domainsInput.value = DEMO_DOMAINS.join("\n");
+  domainsInput.focus();
 });
 
 analyzeBtn.addEventListener("click", analyze);
+sortSelect.addEventListener("change", render);
+
+signalsSection.addEventListener("click", (event) => {
+  const tab = event.target.closest(".signal-tab");
+  if (!tab) return;
+  activeBucket = tab.dataset.bucket;
+  render();
+});
 
 loadExistingLeads();
 
@@ -34,10 +49,14 @@ async function analyze() {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (domains.length === 0) return;
+  if (domains.length === 0) {
+    showToast("Paste at least one website first.", true);
+    return;
+  }
 
-  setStatus(`Scraping and scoring ${domains.length} lead(s)...`);
   analyzeBtn.disabled = true;
+  setStatus(`Scanning ${domains.length} website${domains.length > 1 ? "s" : ""}...`);
+  showSkeleton(domains.length);
 
   try {
     const response = await fetch("/api/analyze", {
@@ -45,12 +64,17 @@ async function analyze() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ domains }),
     });
-    if (!response.ok) throw new Error("Request failed");
-    const leads = await response.json();
-    renderLeads(mergeWithExisting(leads));
-    setStatus(`Done. ${leads.length} lead(s) scored.`);
+    if (!response.ok) throw new Error(await response.text());
+
+    const scored = await response.json();
+    mergeLeads(scored);
+    setStatus("");
+    showToast(`Scored ${scored.length} lead${scored.length > 1 ? "s" : ""}.`);
+    render();
   } catch (error) {
-    setStatus("Something went wrong. Check the server is running.");
+    setStatus("");
+    showToast("Could not reach the server. Check it is running.", true);
+    render();
   } finally {
     analyzeBtn.disabled = false;
   }
@@ -59,52 +83,152 @@ async function analyze() {
 async function loadExistingLeads() {
   try {
     const response = await fetch("/api/leads");
-    const leads = await response.json();
-    if (leads.length > 0) renderLeads(leads);
+    const saved = await response.json();
+    if (saved.length > 0) {
+      leads = saved;
+      render();
+    }
   } catch (error) {
-    // nothing saved yet, that's fine
+    // no leads saved yet, nothing to show
   }
 }
 
-function mergeWithExisting(newLeads) {
-  const existingRows = Array.from(resultsBody.querySelectorAll("tr[data-domain]"));
-  const existing = existingRows.map((row) => JSON.parse(row.dataset.lead));
-  const byDomain = new Map(existing.map((lead) => [lead.domain, lead]));
+function mergeLeads(newLeads) {
+  const byDomain = new Map(leads.map((lead) => [lead.domain, lead]));
   newLeads.forEach((lead) => byDomain.set(lead.domain, lead));
-  return Array.from(byDomain.values()).sort((a, b) => b.score - a.score);
+  leads = Array.from(byDomain.values());
 }
 
-function renderLeads(leads) {
-  resultsBody.innerHTML = "";
-  emptyState.classList.toggle("hidden", leads.length > 0);
+function render() {
+  const counts = { hot: 0, warm: 0, cold: 0 };
+  leads.forEach((lead) => counts[lead.bucket]++);
 
-  for (const lead of leads) {
-    const row = document.createElement("tr");
-    row.className = "border-t border-slate-100";
-    row.dataset.domain = lead.domain;
-    row.dataset.lead = JSON.stringify(lead);
+  document.getElementById("countAll").textContent = leads.length;
+  document.getElementById("countHot").textContent = counts.hot;
+  document.getElementById("countWarm").textContent = counts.warm;
+  document.getElementById("countCold").textContent = counts.cold;
 
-    const bucketClass = BUCKET_STYLES[lead.bucket] || BUCKET_STYLES.cold;
-    const reasons = lead.reasons.slice(0, 2).join(". ") || "No strong signals found";
+  signalsSection.querySelectorAll(".signal-tab").forEach((tab) => {
+    tab.classList.toggle("is-active", tab.dataset.bucket === activeBucket);
+  });
 
-    row.innerHTML = `
-      <td class="px-4 py-3">
-        <div class="font-medium">${escapeHtml(lead.company_name)}</div>
-        <div class="text-slate-400 text-xs">${escapeHtml(lead.domain)}${lead.cached ? " · cached" : ""}</div>
-      </td>
-      <td class="px-4 py-3">
-        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${bucketClass}">
-          ${lead.score} ${lead.bucket}
-        </span>
-      </td>
-      <td class="px-4 py-3 text-slate-600 text-sm">${escapeHtml(reasons)}</td>
-    `;
-    resultsBody.appendChild(row);
+  const visible = leads
+    .filter((lead) => activeBucket === "all" || lead.bucket === activeBucket)
+    .sort((a, b) => (sortSelect.value === "name" ? a.company_name.localeCompare(b.company_name) : b.score - a.score));
+
+  signalsSection.hidden = leads.length === 0;
+  exportBtn.setAttribute("aria-disabled", leads.length === 0 ? "true" : "false");
+  if (leads.length === 0) {
+    exportBtn.removeAttribute("href");
+  } else {
+    exportBtn.href = "/api/export";
   }
+
+  if (leads.length === 0) {
+    ledgerSection.hidden = true;
+    emptyState.hidden = false;
+    ledgerCountLabel.textContent = "";
+    return;
+  }
+
+  emptyState.hidden = true;
+  ledgerSection.hidden = false;
+  ledgerCountLabel.textContent = `${visible.length} of ${leads.length} shown`;
+  ledgerSection.innerHTML = visible.map(renderRow).join("");
+}
+
+function renderRow(lead) {
+  if (!lead.reachable) {
+    return `
+      <details class="lead-row" data-bucket="cold">
+        <summary>
+          <span class="bar"></span>
+          <img class="favicon" src="${faviconUrl(lead.domain)}" alt="" />
+          <span class="lead-name">
+            <span class="company">${escapeHtml(lead.company_name)}</span>
+            <span class="domain mono">${escapeHtml(lead.domain)}</span>
+          </span>
+          <span class="top-reason">Unreachable</span>
+          <span class="score mono">0</span>
+          <span class="chevron">&#8250;</span>
+        </summary>
+        <p class="unreachable-note">Could not reach this website. It may be down, blocking automated requests, or the domain may be incorrect.</p>
+      </details>
+    `;
+  }
+
+  const topReason = lead.reasons[0] || "No strong signals found";
+  const detailItems = SIGNAL_LABELS.map(([key, label]) => {
+    const hit = Boolean(lead.signals[key]);
+    return signalItem(hit, label);
+  });
+
+  const tools = lead.signals.tools_detected || [];
+  detailItems.push(signalItem(tools.length > 0, tools.length > 0 ? `Uses ${tools.join(", ")}` : "No sales/marketing tools detected"));
+
+  const employeeCount = lead.signals.employee_count_hint;
+  detailItems.push(signalItem(Boolean(employeeCount), employeeCount ? `About ${employeeCount} employees` : "No employee count found"));
+
+  return `
+    <details class="lead-row" data-bucket="${lead.bucket}">
+      <summary>
+        <span class="bar"></span>
+        <img class="favicon" src="${faviconUrl(lead.domain)}" alt="" />
+        <span class="lead-name">
+          <span class="company">${escapeHtml(lead.company_name)}</span>
+          <span class="domain mono">${escapeHtml(lead.domain)}${lead.cached ? " (cached)" : ""}</span>
+        </span>
+        <span class="top-reason">${escapeHtml(topReason)}</span>
+        <span class="score mono">${lead.score}</span>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="lead-detail">${detailItems.join("")}</div>
+    </details>
+  `;
+}
+
+function signalItem(hit, label) {
+  return `
+    <span class="signal-item ${hit ? "hit" : ""}">
+      <span class="mark">${hit ? "+" : "-"}</span>
+      <span>${escapeHtml(label)}</span>
+    </span>
+  `;
+}
+
+function showSkeleton(count) {
+  ledgerSection.hidden = false;
+  emptyState.hidden = true;
+  const rows = Array.from({ length: Math.min(count, 6) })
+    .map(
+      () => `
+      <div class="skeleton-row">
+        <span class="skeleton-bar"></span>
+        <span></span>
+        <span class="skeleton-pill" style="width: 45%"></span>
+        <span class="skeleton-pill" style="width: 24px"></span>
+        <span></span>
+      </div>
+    `
+    )
+    .join("");
+  ledgerSection.innerHTML = rows;
+}
+
+function faviconUrl(domain) {
+  return `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(domain)}`;
 }
 
 function setStatus(message) {
   statusEl.textContent = message;
+}
+
+function showToast(message, isError = false) {
+  toastEl.textContent = message;
+  toastEl.classList.toggle("is-error", isError);
+  toastEl.classList.add("is-visible");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("is-visible"), 3200);
 }
 
 function escapeHtml(value) {
