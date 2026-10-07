@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
     rel="stylesheet"
   />
   <link rel="stylesheet" href="/styles.css" />
@@ -15,57 +15,64 @@
 </head>
 <body>
   <div class="shell">
-    <header class="masthead">
+    <aside class="sidebar">
       <div>
-        <h1>Lead Scoring</h1>
-        <p>Paste company websites. Get them ranked by how sales-ready they are, with the reason for every score.</p>
+        <h1 class="wordmark">Lead Scoring</h1>
+        <p class="tagline">Scores how ready a company is to buy, with the reason behind every number, not just a ranked list.</p>
       </div>
-    </header>
 
-    <section class="input-strip">
-      <label for="domains">Company websites, one per line</label>
-      <textarea id="domains" placeholder="stripe.com&#10;notion.so&#10;figma.com"></textarea>
-      <div class="input-actions">
-        <button id="analyzeBtn" class="btn btn-primary">Scan leads</button>
-        <button id="demoBtn" class="btn btn-secondary" type="button">Try demo leads</button>
-        <a id="exportBtn" href="/api/export" class="btn btn-secondary" aria-disabled="true">Export CSV</a>
-        <span id="status" class="status-line"></span>
+      <div class="stat-stack" id="statStack">
+        <button class="stat-row is-active" data-bucket="all" type="button">
+          <span class="label">all leads</span>
+          <span class="count" id="countAll">0</span>
+        </button>
+        <button class="stat-row" data-bucket="hot" type="button">
+          <span class="label">hot</span>
+          <span class="count" id="countHot">0</span>
+        </button>
+        <button class="stat-row" data-bucket="warm" type="button">
+          <span class="label">warm</span>
+          <span class="count" id="countWarm">0</span>
+        </button>
+        <button class="stat-row" data-bucket="cold" type="button">
+          <span class="label">cold</span>
+          <span class="count" id="countCold">0</span>
+        </button>
       </div>
-    </section>
 
-    <section id="signals" class="signals" hidden>
-      <button class="signal-tab is-active" data-bucket="all" type="button">
-        <span class="count" id="countAll">0</span>
-        <span class="label">all leads</span>
-      </button>
-      <button class="signal-tab" data-bucket="hot" type="button">
-        <span class="count" id="countHot">0</span>
-        <span class="label">hot</span>
-      </button>
-      <button class="signal-tab" data-bucket="warm" type="button">
-        <span class="count" id="countWarm">0</span>
-        <span class="label">warm</span>
-      </button>
-      <button class="signal-tab" data-bucket="cold" type="button">
-        <span class="count" id="countCold">0</span>
-        <span class="label">cold</span>
-      </button>
-    </section>
+      <div class="about">
+        <strong>How the score works</strong>
+        Each site is checked for real signals: a careers page, a pricing page, a contact email, marketing tools in use, and more. Every point is explained, so a score can be verified, not just trusted.
+      </div>
+    </aside>
 
-    <div class="ledger-head">
-      <span class="count-label" id="ledgerCountLabel"></span>
-      <select id="sortSelect" class="sort-select" aria-label="Sort leads">
-        <option value="score">Sort: score, high to low</option>
-        <option value="name">Sort: company name</option>
-      </select>
-    </div>
+    <main class="main">
+      <section class="input-strip">
+        <label for="domains">Company websites, one per line</label>
+        <textarea id="domains" placeholder="stripe.com&#10;notion.so&#10;figma.com"></textarea>
+        <div class="input-actions">
+          <button id="analyzeBtn" class="btn btn-primary">Scan leads</button>
+          <button id="demoBtn" class="btn btn-secondary" type="button">Try demo leads</button>
+          <a id="exportBtn" href="/api/export" class="btn btn-secondary" aria-disabled="true">Export CSV</a>
+          <span id="status" class="status-line"></span>
+        </div>
+      </section>
 
-    <section id="ledger" class="ledger" hidden></section>
+      <div class="ledger-head">
+        <span class="count-label" id="ledgerCountLabel"></span>
+        <select id="sortSelect" class="sort-select" aria-label="Sort leads">
+          <option value="score">Sort: score, high to low</option>
+          <option value="name">Sort: company name</option>
+        </select>
+      </div>
 
-    <div id="emptyState" class="empty-state">
-      <strong>No leads scanned yet</strong>
-      Paste a list of company websites above, or click "Try demo leads" to see it in action.
-    </div>
+      <section id="ledger" class="ledger" hidden></section>
+
+      <div id="emptyState" class="empty-state">
+        <strong>No leads scanned yet</strong>
+        Paste a list of company websites above, or click "Try demo leads" to see it in action.
+      </div>
+    </main>
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

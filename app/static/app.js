@@ -15,7 +15,7 @@ const analyzeBtn = document.getElementById("analyzeBtn");
 const demoBtn = document.getElementById("demoBtn");
 const exportBtn = document.getElementById("exportBtn");
 const statusEl = document.getElementById("status");
-const signalsSection = document.getElementById("signals");
+const statStack = document.getElementById("statStack");
 const ledgerSection = document.getElementById("ledger");
 const ledgerCountLabel = document.getElementById("ledgerCountLabel");
 const sortSelect = document.getElementById("sortSelect");
@@ -34,10 +34,10 @@ demoBtn.addEventListener("click", () => {
 analyzeBtn.addEventListener("click", analyze);
 sortSelect.addEventListener("change", render);
 
-signalsSection.addEventListener("click", (event) => {
-  const tab = event.target.closest(".signal-tab");
-  if (!tab) return;
-  activeBucket = tab.dataset.bucket;
+statStack.addEventListener("click", (event) => {
+  const row = event.target.closest(".stat-row");
+  if (!row) return;
+  activeBucket = row.dataset.bucket;
   render();
 });
 
@@ -108,15 +108,14 @@ function render() {
   document.getElementById("countWarm").textContent = counts.warm;
   document.getElementById("countCold").textContent = counts.cold;
 
-  signalsSection.querySelectorAll(".signal-tab").forEach((tab) => {
-    tab.classList.toggle("is-active", tab.dataset.bucket === activeBucket);
+  statStack.querySelectorAll(".stat-row").forEach((row) => {
+    row.classList.toggle("is-active", row.dataset.bucket === activeBucket);
   });
 
   const visible = leads
     .filter((lead) => activeBucket === "all" || lead.bucket === activeBucket)
     .sort((a, b) => (sortSelect.value === "name" ? a.company_name.localeCompare(b.company_name) : b.score - a.score));
 
-  signalsSection.hidden = leads.length === 0;
   exportBtn.setAttribute("aria-disabled", leads.length === 0 ? "true" : "false");
   if (leads.length === 0) {
     exportBtn.removeAttribute("href");
@@ -148,7 +147,7 @@ function renderRow(lead) {
             <span class="company">${escapeHtml(lead.company_name)}</span>
             <span class="domain mono">${escapeHtml(lead.domain)}</span>
           </span>
-          <span class="top-reason">Unreachable</span>
+          <span class="magnitude"><span style="width: 0%"></span></span>
           <span class="score mono">0</span>
           <span class="chevron">&#8250;</span>
         </summary>
@@ -157,11 +156,7 @@ function renderRow(lead) {
     `;
   }
 
-  const topReason = lead.reasons[0] || "No strong signals found";
-  const detailItems = SIGNAL_LABELS.map(([key, label]) => {
-    const hit = Boolean(lead.signals[key]);
-    return signalItem(hit, label);
-  });
+  const detailItems = SIGNAL_LABELS.map(([key, label]) => signalItem(Boolean(lead.signals[key]), label));
 
   const tools = lead.signals.tools_detected || [];
   detailItems.push(signalItem(tools.length > 0, tools.length > 0 ? `Uses ${tools.join(", ")}` : "No sales/marketing tools detected"));
@@ -178,7 +173,7 @@ function renderRow(lead) {
           <span class="company">${escapeHtml(lead.company_name)}</span>
           <span class="domain mono">${escapeHtml(lead.domain)}${lead.cached ? " (cached)" : ""}</span>
         </span>
-        <span class="top-reason">${escapeHtml(topReason)}</span>
+        <span class="magnitude"><span style="width: ${lead.score}%"></span></span>
         <span class="score mono">${lead.score}</span>
         <span class="chevron">&#8250;</span>
       </summary>
@@ -206,7 +201,7 @@ function showSkeleton(count) {
         <span class="skeleton-bar"></span>
         <span></span>
         <span class="skeleton-pill" style="width: 45%"></span>
-        <span class="skeleton-pill" style="width: 24px"></span>
+        <span class="skeleton-pill" style="width: 100%"></span>
         <span></span>
       </div>
     `
